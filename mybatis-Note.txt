@@ -1,0 +1,262 @@
+mybatis:
+	1. 配置全局变量mybatis-config.xml文件：连数据库，配置映射文件
+	2. 映射文件：
+		 1.）<?xml version="1.0" encoding="UTF-8" ?>
+		        <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+					"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+		      <mapper namespace="全限定类名"> 
+			    public boolean insertUser(User user)
+		      </mapper>
+			  
+			a.) 返回值类型有insert、update、delete语句的返回值可以是Integer、Long和Boolean
+			b.)
+			c.)
+		 2.）<insert id="与映射文件类方法名一致" useGeneratedKeys="true" keyProperty="id" >
+			     insert into user_t(name,password,age) VALUES (#{name},#{password},#{age})
+				 <--useGeneratedKeys="true":使用自增主键获取主键 ,keyProperty：指定对应主键属性，mybatis获取主键值之后，将这个值封装给javaBean的对应属性-->
+		     </insert>
+				a.) 查询语句对应返回值类型：（1）resultMap=""：结果集（2）resultType=""：int、string、long、class、java.util.Map
+				b.) #{}，${}传入值的区别：（1）#{}：可以防止sql注入，安全性较强（2）${}：可以传如除表内值以外的属性，如表的列和行名，表的名称。灵活性更强
+
+							<!--    ..........................自定义resultMap结果集映射规则........................................-->
+
+								<!--type：自定义的Map返回Java类型
+									id： 指定主键封装规则
+									column：指定数据据库对应的列的属性
+									property：指定的是Java类中的属性-->
+									
+								<resultMap id="UserDTO" type="com.example.demo.model.UserDTO">
+									<id column="id" property="id01"/>
+									<result column="name" property="name01"></result>
+									<result column="age" property="age01"></result>
+									<result column="password" property="passWord01"></result>
+								</resultMap>
+
+								<select id="selectUserById02" resultMap="UserDTO">
+									select * from user_t where id = #{id}
+								</select>
+								
+							<!--    ..........................多表联合查询........................................-->
+							方法一：直接引用  对象.属性
+								<resultMap id="studentMap" type="com.example.demo.model.Students">
+									<id column="id" property="id"></id>
+									<result column="stu_Num" property="stuNum"></result>
+									.....
+									<result column="bid" property="classes.id"></result>
+									<result column="class_name" property="classes.classes"></result>
+								</resultMap>
+										<--type：返回对象的全限定类名-->
+								<select id="selectById" resultMap="studentMap">
+									SELECT  A.id id,A.stu_Num stu_Num,A.stu_Name stu_Name,A.address address,A.gradeID gradeID ,
+									B.id bid,B.class_name class_name FROM students A,class B WHERE A.gradeID=B.id AND A.id= #{id}
+								</select>
+															
+								
+							方法二：引入 association
+								<resultMap id="studentMap01" type="com.example.demo.model.Students">
+
+									<id column="id" property="id"></id>
+									<result column="stu_Num" property="stuNum"></result>
+									........
+									<association property="classes" javaType="com.example.demo.model.Classes">
+										<id column="bid" property="id"></id>
+										<result column="class_name" property="classes"></result>
+									</association>
+								</resultMap>
+										<--resultMap中引用association ，property="classes"：代表封装的对象classes。javaType：封装对象的全限定类名-->
+								<select id="selectById01" resultMap="studentMap01">
+									SELECT  A.id id,A.stu_Num stu_Num,A.stu_Name stu_Name,A.address address,A.gradeID gradeID ,
+									B.id bid,B.class_name class_name FROM students A,class B WHERE A.gradeID=B.id AND A.id= #{id}
+								</select>
+							
+							
+							方法三： 分表查询
+								<resultMap id="studentsMap" type="com.example.demo.model.Students">
+									<id column="id" property="id"></id>
+									<result column="stu_Num" property="stuNum"></result>
+									<result column="stu_Name" property="stuName"></result>
+									<result column="address" property="address"></result>
+									<result column="gradeID" property="gradeID"></result>
+
+									<association property="classes" select="com.example.demo.mapper.ClassesMapper.selectById" column="gradeID">
+									</association>
+								</resultMap>
+										<!-- property="classes"：封装的对象  select=""另一的映射文件的id  column="gradeID"：将查询出来的gradeID赋给另一个映射文件的传入值#{id}-->
+								<select id="selectByIdStep" resultMap="studentsMap">
+									select * from students where id = #{id}
+								</select>
+								
+	3. 创建映射文件类与映射文件一一关联；
+		1.）eg01：public interface StudentsMapper {
+					public Students selectByIdStep(Integer id);
+			 
+			 // @MapKey：("name")使用name作为map的主键
+					@MapKey("name")
+					public Map<Integer,User> selectUserByName(String name);
+			} 
+	
+	
+	
+	
+mybatis源码分析：
+	1.获取SqlSessionFactory对象
+		1.）创建SqlSessionFactoryBuilder
+		2.）build（inputSream）
+		3.）创建解析器parser
+		4.）解析全局配置文件中的每一个标签，保存在Configuration中
+		5.）解析mapper.xml文件：连数据库，配置映射文件
+			Mapper.xml中的每一个元素解析出来并保存在全局配置中将增删改查标签的每一个标签每一个属性都解析出来，封装成
+			一个MapperStatement一个MapperStatement就代表一个增删改查标签的详细信息。
+		6.）返回Configuration
+		7.）build（Configuration）
+		8.）new DefaultSqlSession（）
+		9.）返回创建的DefaultSqlSession，包含了保存全局配置信息Configuration
+		总结：把配置文件的信息解析并保存在Congiguration对象中，返回包含了Configuration的DefaultSqlSession对象。
+	2.获取SqlSession对象
+		1.）openSession（）
+		2.）openSessionFromDateSource（）
+		3.）获取一些信息，创建tx（事务）
+		4.）newExecuteor（）
+		5.）根据Executeor在全局配置中的类型，创建SimpleExecuteor/ReuseExecuteor/BatchExecuteor
+		6.）如果有二级缓存配置开启，创建CachingExecuteor（executeor）
+		7.）executeor = （Executor）interceptorChain.pluginAll（executeor）使用每一个拦截器重新包装Configuration和Executor
+		8.）创建DefaultSqlsession，包含Configuration和Executor
+		9.）返回DefaultSqlsession
+		总结：返回SqlSession的实现类DefaultSqlsession对象，里面包含了Configuration和Executor，Executor（四大对象之一）会在这一步被创建
+					mybatis四大对象指的是:executor,statementHandler,parameterHandler和resultHandler对象。这四个对象在sqlSession内部共同协作完成sql语句的执行,
+					同时也是我们自定义插件拦截的四大对象。
+	3.获取接口的代理对象（MapperProxy）
+		1.）getMapper（type）
+		2.）getMapper（）
+		3.）根据接口类型获取MapperProxyFactory
+		4.）newInstance（SqlSession）
+		5.）创建MapperProxy，他是一个InvocationHandler
+		6.）创建MapperProxy代理对象
+		7.）返回MapperProxy代理对象
+		总结：getMapper返回接口的代理对象，包含了SqlSession对象
+	4.执行增删改查方法
+		1.）invoke（）
+		2.）判断增删改查类型
+		3.）包装参数为一个map或者直接返回
+		4.）SqlSession.selectOne（）
+		5.）selectList（）
+		6.）获取MapperSatement
+		7.）executor.query（ms，***）
+		8.）获取BoundSql，它代表Sql语句的详细信息
+		9.）executor.query
+		10.）查看本地缓存是否有数据，没有就调用queryFromDatabase，查出以后也会保存在本地缓存
+		11.）doQuery（）
+		12.）创建StatamentHandler对象，PreparedStatementHandler
+		13.）（StatamentHandler）interceptorChain，pluginAll（StatamentHandler）
+		14.）创建ParameterHandler，interceptorChain，pluginAll（ParameterHandler）
+		15.）创建ResultHandler，interceptorChain，pluginAll（ResultHandler）
+		16.）预编译Sql产生ParameterHandler对象
+		17.）调用ParameterHandler设置参数
+		18.）调用TypeHandler给Sql预编译设置参数
+		19.）查出数据使用ResultSetHandler处理结果，使用TypeHandler获取value值
+		20.）后续的连接关闭
+		21.）返回List第一个
+		
+mybatis源码分析总结：
+	1.根据配置文件（全局，sql映射）初始化Configuration对象
+	2.创建一个DefaultSqlSession对象，
+		它里面包含Configuration以及Executor（根据配置文件中的DefaltExecutorType创建对应的Execut）
+	3.DefaultSqlSession.getMapper（）拿到Mapper接口对应MapperProxy
+	4.MapperProxy里面有（DefaultSqlSession）
+	5.执行增删改查方法：
+		1）调用DefaultSqlSession的增删改查（Executor）；
+		2）会创建一个StatementHandler对象。（同时也会创建出ParameterHandler和ResultSetHandler）
+		3）调用StatementHandler预编译参数以及设置参数值；使用ParameterHandler来给sql设置参数
+		4）调用StatementHandler的增删改查方法
+		5）ResultSetHandler封装结果
+	注意：四大对象每个创建的时候都有一个interceoterChain.pluginAll（ParameterHandler）；
+	
+	
+	
+public class Test {
+
+    public SqlSessionFactory getSqlSessionFactory() throws IOException {
+        String resource = "mybatis-config.xml";
+        InputStream inputStream = Resources.getResourceAsStream(resource);
+        return new SqlSessionFactoryBuilder().build(inputStream);
+    }
+
+    @Test
+    public void testSelectByCondition() throws Exception {
+
+        SqlSessionFactory sqlSessionFactory = getSqlSessionFactory();
+        SqlSession openSession = sqlSessionFactory.openSession();
+
+        try{
+            StudentsMapper studentsMapper = openSession.getMapper(StudentsMapper.class);
+
+            List<Students> list =studentsMapper.selectByExample(null);
+            for(Students stu:list) {
+                System.out.println(stu.getId());
+            }
+        }finally {
+            openSession.close();
+        }
+    }
+}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
